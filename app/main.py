@@ -142,6 +142,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
 	"https://rj82zr9qagllr85ruo4ez3yvkrp61f8jlbj9ejug.hackonvibe.com",
+	"https://launchpilot-frontend-indol.vercel.app",
   
     ],
     allow_credentials=True,
