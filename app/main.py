@@ -141,9 +141,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-	"https://rj82zr9qagllr85ruo4ez3yvkrp61f8jlbj9ejug.hackonvibe.com",
-	"https://launchpilot-frontend-indol.vercel.app",
-  
+        "https://rj82zr9qagllr85ruo4ez3yvkrp61f8jlbj9ejug.hackonvibe.com",
+        "https://launchpilot-frontend-indol.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -496,25 +495,26 @@ def score_creator(
     score = 40
     reasons = []
 
-    strong_keywords = [
-        "university",
-        "college",
-        "student",
-        "study",
-        "studying",
-        "exam",
-        "revision",
-        "productivity",
-        "learning",
+    audience_keywords = [
+        word.strip(".,!?()[]{}:;\"'").lower()
+        for word in audience.split()
+        if len(word) >= 4
     ]
+
+    creator_keywords = list(
+        dict.fromkeys(
+            audience_keywords
+            + creator.get("search_keywords", [])
+        )
+    )
 
     keyword_matches = [
         keyword
-        for keyword in strong_keywords
+        for keyword in creator_keywords
         if keyword in text
     ]
 
-    score += min(len(keyword_matches) * 6, 30)
+    score += min(len(keyword_matches) * 7, 30)
 
     if keyword_matches:
         reasons.append(
@@ -522,11 +522,11 @@ def score_creator(
             + ", ".join(keyword_matches[:4])
         )
 
-    if creator["matches"] > 1:
-        score += min(creator["matches"] * 4, 12)
-        reasons.append(
-            f"Appeared in {creator['matches']} relevant searches"
-        )
+        if creator["matches"] > 1:
+            score += min(creator["matches"] * 4, 12)
+            reasons.append(
+                f"Appeared in {creator['matches']} relevant searches"
+            )
 
     subscribers = channel_details.get("subscriber_count", 0)
     videos = channel_details.get("video_count", 0)
@@ -594,12 +594,37 @@ def discover_youtube_creators(app_id: int):
                 detail="YouTube API key is not configured",
             )
 
+        description_words = [
+            word.strip(".,!?()[]{}:;\"'").lower()
+            for word in app_record.description.split()
+        ]
+
+        stop_words = {
+            "the", "a", "an", "and", "or", "to", "for", "of",
+            "in", "on", "with", "that", "this", "is", "are",
+            "it", "your", "you", "from", "into", "by"
+        }
+
+        keywords = []
+
+        for word in description_words:
+            if (
+                len(word) >= 4
+                and word not in stop_words
+                and word not in keywords
+            ):
+                keywords.append(word)
+
+        keywords = keywords[:4]
+
+        topic_phrase = " ".join(keywords)
+
         search_queries = [
-            f"{app_record.audience} study tips",
-            "university study tips",
-            "study productivity",
-            "exam preparation students",
-            "student productivity",
+            f"{app_record.audience} creators",
+            f"{app_record.audience} {topic_phrase}",
+            f"{topic_phrase} creators",
+            f"{app_record.audience} tips",
+            topic_phrase,
         ]
 
         discovered_channels = {}
@@ -641,6 +666,7 @@ def discover_youtube_creators(app_id: int):
                 snippet = item.get("snippet", {})
 
                 discovered_channels[channel_id] = {
+                    "search_keywords": keywords,
                     "channel_id": channel_id,
                     "name": snippet.get("title", "Unknown creator"),
                     "description": snippet.get("description", ""),
@@ -811,7 +837,12 @@ def discover_youtube_creators(app_id: int):
             "creators_returned": len(creators),
             "creators": creators,
         }
-
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error discovering YouTube creators: {str(e)}",
+        )
     finally:
         db.close()
 
